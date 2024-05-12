@@ -26,7 +26,7 @@ export const Verify = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [numberValid, setNumberValid] = useState(false);
-
+  // back arrow sarch bar
   const sendVerificationCode = async () => {
     try {
       setLoading(true);
