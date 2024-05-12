@@ -1,118 +1,230 @@
-import { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Keyboard,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+} from 'react-native';
+
+import { api } from './service/api';
 import PhoneInput from 'react-native-phone-number-input';
-import axios from 'axios';
-import { TextInput } from 'react-native-gesture-handler';
+import { ScrollView } from 'react-native-gesture-handler';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 
 export const Verify = () => {
   const phoneInput = useRef();
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [formattedNumber, setFormattedNumber] = useState('');
   const [pin, setPin] = useState('');
   const [sid, setSid] = useState('');
+  const [activeSection, setActiveSection] = useState('1');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [numberValid, setNumberValid] = useState(false);
 
   const sendVerificationCode = async () => {
     try {
-      const formData = new FormData();
-      formData.append('Channel', 'sms');
-      formData.append('To', formattedNumber);
-
-      await axios
-        .post(
-          process.env.EXPO_PUBLIC_Base_Url +
-            process.env.EXPO_PUBLIC_Service_Id +
-            '/Verifications',
-          formData,
-          {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            auth: {
-              username: process.env.EXPO_PUBLIC_Account_Id,
-              password: process.env.EXPO_PUBLIC_Auth_Token,
-            },
-          }
-        )
-        .then((res) => setSid(res.data.sid));
-    } catch (err) {
-      console.log(err);
+      setLoading(true);
+      const response = await api.sendVerificationCode(phoneNumber);
+      setSid(response.sid);
+      setActiveSection('2');
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const verifyNumberWithCode = async () => {
     try {
-      const formData = new FormData();
-      formData.append('Channel', 'sms');
-      formData.append('To', formattedNumber);
-      formData.append('Code', pin);
-      formData.append('VerificationSid', sid);
-
-      await axios
-        .post(
-          process.env.EXPO_PUBLIC_Base_Url +
-            process.env.EXPO_PUBLIC_Service_Id +
-            '/VerificationCheck',
-          formData,
-          {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            auth: {
-              username: process.env.EXPO_PUBLIC_Account_Id,
-              password: process.env.EXPO_PUBLIC_Auth_Token,
-            },
-          }
-        )
-        .then((res) => console.log(JSON.stringify(res.data, null, 2)));
-    } catch (err) {
-      console.log(err);
+      setLoading(true);
+      const response = await api.verifyNumberWithCode(phoneNumber, pin, sid);
+      console.log(response);
+      setNumberValid(response.valid);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <PhoneInput
-        ref={phoneInput}
-        defaultValue={phoneNumber}
-        defaultCode='TR'
-        layout='first'
-        onChangeText={(text) => {
-          setPhoneNumber(text);
-        }}
-        onChangeFormattedText={(e) => setFormattedNumber(e)}
-        withDarkTheme
-        withShadow
-        autoFocus
-      />
-      <TouchableOpacity style={styles.button} onPress={sendVerificationCode}>
-        <Text>Send Sms</Text>
-      </TouchableOpacity>
-      <TextInput
-        value={pin}
-        onChangeText={(e) => setPin(e)}
-        style={styles.pinField}
-      />
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior='padding'>
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+            <ScrollView contentContainerStyle={{ paddingTop: 36 }}>
+              <Text
+                style={[
+                  styles.step,
+                  { color: activeSection === '1' ? 'black' : '#ccc' },
+                ]}
+              >
+                Step 1
+              </Text>
+              <PhoneInput
+                ref={phoneInput}
+                defaultCode='TR'
+                value={phone}
+                onChangeText={(e) => setPhone(e)}
+                onChangeFormattedText={(e) => {
+                  setPhoneNumber(e);
+                  phoneInput.current?.isValidNumber(e)
+                    ? Keyboard.dismiss()
+                    : null;
+                }}
+                containerStyle={styles.phoneInputContainer}
+                textContainerStyle={styles.phoneInputTextContainer}
+                countryPickerButtonStyle={{
+                  borderRadius: 16,
+                  marginRight: 4,
+                  backgroundColor: '#ccc',
+                }}
+              />
+              <TouchableOpacity
+                disabled={
+                  activeSection === '2' ||
+                  !phoneInput.current?.isValidNumber(phone)
+                }
+                onPress={sendVerificationCode}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: `rgba(0, 122, 255, ${
+                      phoneInput.current?.isValidNumber(phone) &&
+                      activeSection === '1'
+                        ? 1
+                        : 0.3
+                    })`,
+                  },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color={'white'} />
+                ) : (
+                  <Text style={styles.buttonText}>Send Verification Code</Text>
+                )}
+              </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={verifyNumberWithCode}>
-        <Text>Verify Number</Text>
-      </TouchableOpacity>
-    </View>
+              <Text
+                style={[
+                  styles.step,
+                  { color: activeSection === '2' ? 'black' : '#ccc' },
+                ]}
+              >
+                Step 2
+              </Text>
+              <TextInput
+                placeholder='Verification Code'
+                value={pin}
+                onChangeText={(e) => {
+                  setPin(e);
+                  e.length === 6 ? Keyboard.dismiss() : null;
+                }}
+                editable={activeSection === '2'}
+                style={styles.textField}
+                showSoftInputOnFocus={true}
+                maxLength={6}
+                keyboardType='numeric'
+              />
+              <TouchableOpacity
+                disabled={activeSection === '1'}
+                onPress={verifyNumberWithCode}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: `rgba(0, 122, 255, ${
+                      activeSection === '1' ? 0.3 : 1
+                    })`,
+                  },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.buttonText}>Verify Number</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+        <TouchableOpacity
+          style={[
+            styles.button,
+            styles.shadow,
+            {
+              backgroundColor: numberValid ? 'green' : 'grey',
+              alignSelf: 'flex-end',
+              flexDirection: 'row',
+            },
+          ]}
+        >
+          <Text style={[styles.buttonText, { marginHorizontal: 16 }]}>
+            {numberValid ? 'Done' : "I'll do it later"}
+          </Text>
+          <Feather name='arrow-right' size={28} color='white' />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+  },
+  textField: {
+    padding: 16,
+    borderRadius: 16,
+    fontSize: 16,
+    backgroundColor: '#ccc',
+    textAlign: 'center',
+  },
+  phoneInputContainer: {
+    width: '100%',
+    alignSelf: 'center',
+    borderRadius: 16,
+    backgroundColor: 'transparent',
   },
   button: {
-    marginTop: 24,
-    backgroundColor: '#007AFF',
     padding: 16,
     alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 64,
+    borderRadius: 16,
   },
-  pinField: {
-    padding: 16,
-    backgroundColor: '#bbb',
+  phoneInputTextContainer: {
+    borderRadius: 16,
+    backgroundColor: '#ccc',
+  },
+  step: {
+    fontSize: 32,
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  shadow: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  validText: {
+    textAlign: 'center',
   },
 });
